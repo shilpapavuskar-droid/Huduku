@@ -1,0 +1,5 @@
+Django==5.2
+psycopg[binary,async]==3.2.6
+uvicorn==0.30.1
+django-ninja==1.4.1
+djangorestframework
