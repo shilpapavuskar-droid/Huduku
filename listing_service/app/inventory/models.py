@@ -20,6 +20,8 @@ class Category(models.Model):
     )
     slug = models.SlugField(max_length=255, unique=True)
 
+    class Meta:
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -53,19 +55,23 @@ class Listing(models.Model):
 # ---------------------------
 # LISTING MEDIA MODEL
 # ---------------------------
-class ListingMedia(models.Model):
+class ListingImage(models.Model):
     id = models.AutoField(primary_key=True,editable=False)
 
     listing = models.ForeignKey(
         Listing,
         on_delete=models.CASCADE,
-        related_name='media'
+        related_name='images'
     )
-    media_id = models.IntegerField(unique=True)  # if media is handled externally (S3, etc.)
-    type = models.CharField(max_length=50)
+    image = models.ImageField(upload_to="listings/")  # if media is handled externally (S3, etc.)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.type} for {self.listing.title}"
+        return f"Image for {self.listing.title}"
 
 #
 # ---------------------------
@@ -95,10 +101,11 @@ class Review(models.Model):
 class Favorite(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-    # class Meta:
-    #     unique_together = ('user_id', 'listing')  # prevent duplicate favorites
-    #
-    # def __str__(self):
-    #     return f"Favorite by {self.user_id}"
-    #
+    class Meta:
+        unique_together = ('user', 'listing')  # prevent duplicate favorites
+
+    def __str__(self):
+        return f"Favorite by {self.user.id} for listing {self.listing.id}"
+

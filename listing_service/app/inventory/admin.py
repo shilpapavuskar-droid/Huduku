@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Category, Listing, ListingMedia, Review, Favorite
+from django.utils.html import format_html
+from .models import Category, Listing,  Review, Favorite, ListingImage
 
 
 # -------------------------
@@ -29,29 +30,27 @@ class ListingAdmin(admin.ModelAdmin):
 
 
 # -------------------------
-# LISTING MEDIA ADMIN
+# LISTING Image ADMIN
 # -------------------------
-@admin.register(ListingMedia)
-class ListingMediaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'listing', 'media_id', 'type')
-    list_filter = ('type',)
+@admin.register(ListingImage)
+class ListingImageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'listing', 'image_preview', 'created_at', 'updated_at')
+    list_filter = ('created_at', )
     search_fields = ('listing__title',)
-    ordering = ('listing',)
+    ordering = ('created_at',)
+    readonly_fields = ('image_preview',)
+
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" width="100" />',
+                obj.image.url
+            )
+        return "No Image"
+
+    image_preview.short_description = "Preview"
 
 
-# -------------------------
-# REVIEW ADMIN
-# -------------------------
-@admin.register(Review)
-class ReviewAdmin(admin.ModelAdmin):
-    list_display = (
-        'id', 'listing', 'reviewer_user_id',
-        'rating', 'comment', 'created_at'
-    )
-    search_fields = ('comment', 'listing__title')
-    list_filter = ('rating',)
-    readonly_fields = ('created_at',)
-    ordering = ('-created_at',)
 
 
 # -------------------------
@@ -68,4 +67,17 @@ class FavoriteAdmin(admin.ModelAdmin):
 # REGISTER MODELS
 # -------------------------
 
-# Register your models here.
+# -------------------------
+# REVIEW ADMIN
+# -------------------------
+# @admin.register(Review)
+# class ReviewAdmin(admin.ModelAdmin):
+#     list_display = (
+#         'id', 'listing', 'reviewer_user_id',
+#         'rating', 'comment', 'created_at'
+#     )
+#     search_fields = ('comment', 'listing__title')
+#     list_filter = ('rating',)
+#     readonly_fields = ('created_at',)
+#     ordering = ('-created_at',)
+# # Register your models here.
