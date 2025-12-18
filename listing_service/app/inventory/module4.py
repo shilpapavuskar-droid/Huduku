@@ -1,13 +1,17 @@
+from email.mime import image
 from typing import List,Optional
 from typing import List,Optional
 import uuid
 from ninja import Router,Schema
-from .models import Category, Listing, ListingMedia, Review, Favorite
+from .models import Category, Listing, Review, Favorite, ListingImage
 from ninja.errors import HttpError
 from ninja import Schema
 from django.shortcuts import get_object_or_404
 import  datetime
-
+from ninja import  File
+from ninja.files import UploadedFile
+from ninja import Query
+from django.db import IntegrityError
 
 router = Router()
 MEDIA_URL = '/media/'
@@ -97,9 +101,25 @@ class ListingOut(Schema):
 
 
 @router.get("/listings", response=List[ListingOut])
-def get_listings(request):
-    listings = Listing.objects.filter(is_active=True)
-    return list(listings)
+def get_listings(request,location: Optional[str] = Query(None),
+    category: Optional[int] = Query(None),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None)):
+    qs = Listing.objects.filter(is_active=True)
+
+    if location:
+        qs = qs.filter(location__icontains=location)
+
+    if category:
+        qs = qs.filter(category_id=category)
+
+    if min_price is not None:
+        qs = qs.filter(price__gte=min_price)
+
+    if max_price is not None:
+        qs = qs.filter(price__lte=max_price)
+
+    return list(qs)
 
 @router.post("/listing/create", response=ListingOut)
 def create_listing(request, data: ListingIn):
@@ -147,59 +167,148 @@ def delete_listing(request, listing_id: int):
     return {"success": True}
 #
 # # #-------------------
-# #ListingMedia
+# #ListingImages
 # #---------------------
-class ListingMediaIn(Schema):
-    listing: int     # listing_id
-    media_id: int     # external storage id (S3, cloud)
-    type: str               # e.g., "image", "video"
+class ListingImageIn(Schema):
+    listing_id: int
 
 
-class ListingMediaOut(Schema):
+
+class ListingImageOut(Schema):
     id: int
-    listing: int
-    media_id: int
-    type: str
+    listing_id: int
+    image: str
+    created_at: datetime.datetime
 
-@router.post("/media/create", response=ListingMediaOut, tags=["media"])
-def create_media(request, data: ListingMediaIn):
-    listing = get_object_or_404(Listing, id=data.listing_id)
+@router.post("/listing/{listing_id}/image/upload", response=ListingImageOut )
+def upload_listing_image(request, listing_id: int,image:UploadedFile = File(...)
+                         ):
+    listing = get_object_or_404(Listing, id=listing_id)
 
-    media = ListingMedia.objects.create(
+    listing_image = ListingImage.objects.create(
         listing=listing,
-        media_id=data.media_id,
-        type=data.type
+        image=image
     )
 
-    return media
+    return {
+        "id": listing_image.id,
+        "listing_id": listing.id,
+        "image": listing_image.image.url,
+        "created_at": listing_image.created_at,
+    }
 #
-@router.get("/media/list/{listing_id}", response=list[ListingMediaOut], tags=["media"])
-def list_media(request, listing_id: int):
-    return ListingMedia.objects.filter(listing_id=listing_id)
+@router.get("/listing/{listing_id}/images/", response=List[ListingImageOut])
+def get_listing_images(request, listing_id: int):
+    images = ListingImage.objects.filter(listing_id=listing_id)
 
-@router.get("/media/{media_id}", response=ListingMediaOut, tags=["media"])
-def get_media(request, media_id: int):
-    return get_object_or_404(ListingMedia, id=media_id)
+    return [
+         {
+             "id": img.id,
+             "listing_id": img.listing_id,
+             "image":img.image.url,
+             "created_at": img.created_at,
+         }
+       for img in images
+   ]
 
+@router.delete("/listing/{listing_id}/images/")
+def delete_listing_image(request, listing_id : int):
+    listing = get_object_or_404(Listing, id=listing_id)
+    deleted_count, _ = ListingImage.objects.filter(listing=listing).delete()
+    return {
+        "success": True,
+        "deleted_images": deleted_count
+    }
+
+
+@router.delete("/listing/{listing_id}/image/{image_id}")
+def delete_single_listing_image(request, listing_id: int, image_id: int):
+    image = get_object_or_404(
+        ListingImage,
+        id=image_id,
+        listing_id=listing_id
+    )
+    image.delete()
+    return {"success": True}
+
+# @router.get("/media/{media_id}", response=ListingMediaOut, tags=["media"])
+# def get_media(request, media_id: int):
+#     return get_object_or_404(ListingMedia, id=media_id)
 #
-@router.put("/media/{media_id}", response=ListingMediaOut, tags=["media"])
-def update_media(request, media_id: int, data: ListingMediaIn):
-    media = get_object_or_404(ListingMedia, id=media_id)
+# #
+# @router.put("/media/{media_id}", response=ListingImageOut, tags=["media"])
+# def update_media(request, media_id: int, data: ListingMediaIn):
+#     media = get_object_or_404(ListingMedia, id=media_id)
+#     listing = get_object_or_404(Listing, id=data.listing_id)
+#
+#     media.listing = listing
+#     media.media_id = data.media_id
+#     media.type = data.type
+#     media.save()
+#
+#     return media
+# #
+
+
+
+
+
+# # #--------------------
+# # #Favotite Endpoints
+# # #--------------------
+class FavoriteIn(Schema):
+    user_id :int
+    listing_id:int
+
+class FavoriteOut(Schema):
+    id: int
+    user_id: int
+    listing_id: int
+    created_at: datetime.datetime
+
+
+
+
+@router.post("/favorite/add", response=FavoriteOut)
+def add_favorite(request, data: FavoriteIn):
+    user = get_object_or_404(User,id=data.user_id)
     listing = get_object_or_404(Listing, id=data.listing_id)
 
-    media.listing = listing
-    media.media_id = data.media_id
-    media.type = data.type
-    media.save()
+    try:
+        favorite = Favorite.objects.create(
+        user=user,
+        listing=listing
+    )
+    except IntegrityError:
+        return{
+            "error": True,
+            "message":"Already  favorited"
+        }
+    return {
+        "id": favorite.id,
+        "user_id": favorite.user.id,
+        "listing_id": favorite.listing.id,
+     }
 
-    return media
-#
-@router.delete("/media/{media_id}", tags=["media"])
-def delete_media(request, media_id: int):
-    media = get_object_or_404(ListingMedia, id=media_id)
-    media.delete()
 
+@router.get("/favorites/{user_id}", response=List[FavoriteOut])
+def list_favorites(request, user_id: int):
+    return list(
+        Favorite.objects.filter(user_id=user_id).select_related("listing")
+
+   )
+
+@router.delete("/favorite/{favorite_id}")
+def delete_favorite(request, favorite_id: int):
+    try:
+        fav = Favorite.objects.get(id=favorite_id)
+    except Favorite.DoesNotExist:
+        return{"error": True,"message":"Favorite not found "}
+    fav.delete()
     return {"success": True}
+
+
+
 
 # #
 # # # #-----------------
@@ -232,45 +341,6 @@ def delete_media(request, media_id: int):
 # def create_review(request, data: ReviewIn):
 #     review = Review.objects.create(**data.dict())
 #     return review
-#
-#
-# # #--------------------
-# # #Favotite Endpoints
-# # #--------------------
-# class FavoriteIn(Schema):
-#     user_id :int
-#     listing:int
-#
-# class FavoriteOut(Schema):
-#     id: int
-#     user_id: int
-#     listing_id: int
-#     created_at: datetime
-#
-#
-#
-#
-# @router.post("/favorite/add", response=FavoriteOut)
-# def add_favorite(request, data: FavoriteIn):
-#     favorite = Favorite.objects.create(
-#         user_id=data.user_id,
-#         listing_id=data.listing_id
-#     )
-#     return favorite
-#
-#
-# @router.get("/favorites/{user_id}", response=List[FavoriteOut])
-# def list_favorites(request, user_id: int):
-#     return list(Favorite.objects.filter(user_id=user_id))
-#
-#
-#
-#
-# @router.delete("/favorite/{favorite_id}")
-# def delete_favorite(request, favorite_id: int):
-#     fav = get_object_or_404(Favorite,id=favorite_id)
-#     fav.delete()
-#     return {"success": True}
 #
 #
 
