@@ -71,3 +71,20 @@ services:
       - "8001:8000"
     env_file:
       - ./env/auth.env
+    command: >
+      sh -c "
+        if python manage.py shell -c 'from django.contrib.auth.models import User; print(User.objects.filter(username=\"admin\").exists())' | grep -q 'True'; then
+                  echo 'Admin user exists, skipping app and database setup';
+                else
+                  echo 'Setting up database and creating admin user' &&
+                  rm -f inventory/migrations/0001_initial.py &&
+                  python manage.py migrate &&
+                  python manage.py makemigrations &&
+                  python manage.py migrate users &&
+                  python manage.py shell -c 'from django.contrib.auth.models import User;User.objects.create_superuser(\"admin\",\"admin@example.com\",\"admin\")';
+                fi && 
+                echo 'Cleaning and collecting static files' &&
+                rm -rf static &&
+                python manage.py collectstatic --noinput &&
+                uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --reload
+              "

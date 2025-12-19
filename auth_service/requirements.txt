@@ -4,3 +4,5 @@ uvicorn==0.30.1
 django-ninja==1.4.1
 Pillow==12.0.0
 djangorestframework
+pydantic
+email-validator
