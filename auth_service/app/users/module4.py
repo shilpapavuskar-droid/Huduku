@@ -2,7 +2,10 @@ from ninja import Schema ,Router
 from django.contrib.auth.models import User
 from pydantic import EmailStr, constr
 from django.shortcuts import get_object_or_404
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
+from ninja.errors import HttpError
+import jwt
+import datetime
 
 from .services import register_user , update_user_profile
 
@@ -25,6 +28,54 @@ def register(request, payload: RegisterIn):
         password=payload.password
     )
     return user
+
+
+#TODO: forgot password.
+@router.get("/users/verify-token")
+def verify_token(request):
+    auth = request.headers.get("Authorization")
+
+    if not auth:
+        raise HttpError(401, "Token missing")
+
+    parts = auth.split()
+    token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else auth
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HttpError(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HttpError(401, "Invalid token")
+
+    user_id = int(payload.get("user_id"))
+    if not user_id:
+        raise HttpError(401, "Invalid token payload")
+
+    user = get_object_or_404(User, pk=user_id)
+    return {"user_id": user.id, "email": user.email }
+
+SECRET_KEY = "your-secret"
+
+class LoginIn(Schema):
+    email: str
+    password: str
+
+class LoginOut(Schema):
+    token: str
+
+@router.post("/login", response=LoginOut)
+def login(request, payload: LoginIn):
+    user = authenticate(request, username=payload.email, password=payload.password)
+    if not user:
+        raise HttpError(401, "Invalid credentials")
+    payload_data = {
+        "user_id": user.id,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }
+    token = jwt.encode(payload_data, SECRET_KEY, algorithm="HS256")
+    return {"token": token}
+
 
 class UpdateUserProfileIN(Schema):
 
@@ -79,6 +130,7 @@ class GetUser(Schema):
     last_name: str | None = None
     phone: str | None = None
     is_verified: bool = False
+    is_staff: bool = False
 
 
 
@@ -90,6 +142,12 @@ def get_user(request, user_id: int):
             "first_name": user.profile.first_name,
             "last_name": user.profile.last_name,
             "phone": user.profile.phone,
-            "is_verified": user.profile.is_verified}
+            "is_verified": user.profile.is_verified,
+            "is_staff": user.is_staff}
 
-#TODO: forgot password.
+
+# class user_verfied_out(Schema):
+#     is_verified: bool
+#     user_id: int
+#     email: str
+

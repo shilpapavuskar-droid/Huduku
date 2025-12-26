@@ -12,6 +12,7 @@ from ninja import  File
 from ninja.files import UploadedFile
 from ninja import Query
 from django.db import IntegrityError
+from clients.auth_client import verify_user
 
 router = Router()
 MEDIA_URL = '/media/'
@@ -81,7 +82,6 @@ def delete_category(request, category_id: int):
 #
 class ListingIn(Schema):
     title: str
-    owner_user_id: int
     category: int           # send category_id
     price: float
     location: str
@@ -123,12 +123,21 @@ def get_listings(request,location: Optional[str] = Query(None),
 
 @router.post("/listing/create", response=ListingOut)
 def create_listing(request, data: ListingIn):
-
+    user = verify_user(request)
+    if not user:
+        raise HttpError(401, "Unauthorized")
     # Get category instance
     category = get_object_or_404(Category,id=data.category)
-   # create listing
+    # create listing
     data.category =category
-    listing = Listing.objects.create(**data.dict())
+    listing = Listing.objects.create(
+        title=data.title,
+        category=category,
+        price=data.price,
+        location=data.location,
+        is_active=data.is_active,
+        owner_user_id=user["user_id"]
+    )
     return listing
 # #
 # #
@@ -136,17 +145,26 @@ def create_listing(request, data: ListingIn):
 def get_listing(request, listing_id: int):
     return get_object_or_404(Listing, id=listing_id)
 #
+
+class ListingUpdateIn(Schema):
+    title: Optional[str] = None
+    category: Optional[int] = None
+    price: Optional[float] = None
+    location: Optional[str] = None
+    is_active: Optional[bool] = None
 #
 @router.put("/listing/{listing_id}", response=ListingOut)
-def update_listing(request, listing_id:int , data: ListingIn):
+def update_listing(request, listing_id:int , data: ListingUpdateIn):
     listing = get_object_or_404(Listing, id=listing_id)
+    user = verify_user(request)
+    user_id = user.get("user_id")
+    if user_id != listing.owner_user_id and not user.get("is_staff", False):
+        raise HttpError(401, "Unauthorized")
 
 
     #update fields individually
     if data.title:
         listing.title = data.title
-    if data.owner_user_id:
-        listing.owner_user_id = data.owner_user_id
     if data.category:
         listing.category = get_object_or_404(Category,id=data.category)
     if data.price is not None:
@@ -163,6 +181,9 @@ def update_listing(request, listing_id:int , data: ListingIn):
 @router.delete("/listing/{listing_id}")
 def delete_listing(request, listing_id: int):
     listing = get_object_or_404(Listing, id=listing_id)
+    user = verify_user(request)
+    if user.get("user_id") != listing.owner_user_id and not user.get("is_staff", False):
+        raise HttpError(401, "Unauthorized")
     listing.delete()
     return {"success": True}
 #
@@ -184,6 +205,9 @@ class ListingImageOut(Schema):
 def upload_listing_image(request, listing_id: int,image:UploadedFile = File(...)
                          ):
     listing = get_object_or_404(Listing, id=listing_id)
+    user = verify_user(request)
+    if user.get("user_id") != listing.owner_user_id:
+        raise HttpError(401, "Unauthorized")
 
     listing_image = ListingImage.objects.create(
         listing=listing,
@@ -214,6 +238,9 @@ def get_listing_images(request, listing_id: int):
 @router.delete("/listing/{listing_id}/images/")
 def delete_listing_image(request, listing_id : int):
     listing = get_object_or_404(Listing, id=listing_id)
+    user = verify_user(request)
+    if user.get("user_id") != listing.owner_user_id and not user.get("is_staff", False):
+        raise HttpError(401, "Unauthorized")
     deleted_count, _ = ListingImage.objects.filter(listing=listing).delete()
     return {
         "success": True,
@@ -223,6 +250,10 @@ def delete_listing_image(request, listing_id : int):
 
 @router.delete("/listing/{listing_id}/image/{image_id}")
 def delete_single_listing_image(request, listing_id: int, image_id: int):
+    listing = get_object_or_404(Listing, id=listing_id)
+    user = verify_user(request)
+    if user.get("user_id") != listing.owner_user_id and not user.get("is_staff", False):
+        raise HttpError(401, "Unauthorized")
     image = get_object_or_404(
         ListingImage,
         id=image_id,
@@ -282,7 +313,7 @@ def add_favorite(request, data: FavoriteIn):
     except IntegrityError:
         return{
             "error": True,
-            "message":"Already  favorited"
+            "message":"Already favorited"
         }
     return {
         "id": favorite.id,
@@ -307,40 +338,5 @@ def delete_favorite(request, favorite_id: int):
     fav.delete()
     return {"success": True}
 
-
-
-
-# #
-# # # #-----------------
-# # #Review endpoints
 # # #------------------
-# class ReviewIn(Schema):
-#     listing: int       # listing_id
-#     user_id: int        # reviewer
-#     rating: int
-#     comment: Optional[str] = None
-# #
-# #
-# class ReviewOut(Schema):
-#     id: int
-#     listing: int
-#     user_id: int
-#     rating: int
-#     comment: Optional[str]
-#     created_at: datetime
-#
-#
-#
-# #
-# @router.get("/reviews/{listing_id}", response=List[ReviewOut])
-# def get_reviews(request, listing_id: int):
-#     return Review.objects.filter(listing_id=listing_id)
-#
-#
-# @router.post("/review/create", response=ReviewOut)
-# def create_review(request, data: ReviewIn):
-#     review = Review.objects.create(**data.dict())
-#     return review
-#
-#
 

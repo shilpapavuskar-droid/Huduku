@@ -4,7 +4,7 @@ name: Huduku
   # LISTING (already exists)
   # ------------------------
 services:
-  listing_db_srv:
+  listing-db-srv:
     image: postgres:17.4-alpine3.21
     container_name: listing_db
     restart: always
@@ -15,12 +15,12 @@ services:
 
 
 
-  listing_srv:
+  listing-srv:
     build: ./listing_service
     container_name: listing_srv
     restart: always
     depends_on:
-      - listing_db_srv
+      - listing-db-srv
     volumes:
       - ./listing_service/app:/app
     #working_dir: /listing_service/app
@@ -50,7 +50,7 @@ services:
  # ------------------------
   # AUTH SERVICE (NEW)
   # ------------------------
-  auth_db_srv:
+  auth-db-srv:
     image: postgres:17.4-alpine3.21
     container_name: auth_db
     restart: always
@@ -59,12 +59,12 @@ services:
     ports:
       - "5433:5432"
 
-  auth_srv:
+  auth-srv:
     build: ./auth_service
     container_name: auth_srv
     restart: always
     depends_on:
-      - auth_db_srv
+      - auth-db-srv
     volumes:
       - ./auth_service/app:/app
     ports:
