@@ -6,3 +6,5 @@ Pillow==12.0.0
 djangorestframework
 pydantic
 email-validator
+PyJWT
+django-cors-headers
