@@ -5,7 +5,7 @@ AUTH_SERVICE_URL = "http://auth-srv:8000/api/v1/users/verify-token"
 
 def verify_user(request):
     #token = request.headers.get("Authorization")
-    token ="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJleHAiOjE3NjY3MjkzODd9.oqkXnJDy0PU-2A62CT0P94OmyPEeivsohDmUu5v7TgY"
+    token ="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJleHAiOjE3NjY4NDQ1Mzd9.wRqgkQHUqEnOzMh1abEZLp8y7CwFMJtJeJGKJMEydKA"
     if not token:
         return None
 

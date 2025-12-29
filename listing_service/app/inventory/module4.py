@@ -12,10 +12,11 @@ from ninja import  File
 from ninja.files import UploadedFile
 from ninja import Query
 from django.db import IntegrityError
-from clients.auth_client import verify_user
+from core import settings
 
 router = Router()
 MEDIA_URL = '/media/'
+MEDIA_ROOT = settings.MEDIA_ROOT
 
 #------------------------------
 #Category end-points
@@ -81,6 +82,7 @@ def delete_category(request, category_id: int):
 # #---------------------------
 #
 class ListingIn(Schema):
+    user_id: int
     title: str
     category: int           # send category_id
     price: float
@@ -104,7 +106,9 @@ class ListingOut(Schema):
 def get_listings(request,location: Optional[str] = Query(None),
     category: Optional[int] = Query(None),
     min_price: Optional[float] = Query(None),
-    max_price: Optional[float] = Query(None)):
+    max_price: Optional[float] = Query(None),
+    user_id: Optional[int] = Query(None)):
+
     qs = Listing.objects.filter(is_active=True)
 
     if location:
@@ -119,13 +123,13 @@ def get_listings(request,location: Optional[str] = Query(None),
     if max_price is not None:
         qs = qs.filter(price__lte=max_price)
 
+    if user_id is not None:
+        qs = qs.filter(owner_user_id=user_id)
+
     return list(qs)
 
 @router.post("/listing/create", response=ListingOut)
 def create_listing(request, data: ListingIn):
-    user = verify_user(request)
-    if not user:
-        raise HttpError(401, "Unauthorized")
     # Get category instance
     category = get_object_or_404(Category,id=data.category)
     # create listing
@@ -136,7 +140,7 @@ def create_listing(request, data: ListingIn):
         price=data.price,
         location=data.location,
         is_active=data.is_active,
-        owner_user_id=user["user_id"]
+        owner_user_id=data.user_id
     )
     return listing
 # #
@@ -156,11 +160,6 @@ class ListingUpdateIn(Schema):
 @router.put("/listing/{listing_id}", response=ListingOut)
 def update_listing(request, listing_id:int , data: ListingUpdateIn):
     listing = get_object_or_404(Listing, id=listing_id)
-    user = verify_user(request)
-    user_id = user.get("user_id")
-    if user_id != listing.owner_user_id and not user.get("is_staff", False):
-        raise HttpError(401, "Unauthorized")
-
 
     #update fields individually
     if data.title:
@@ -205,9 +204,6 @@ class ListingImageOut(Schema):
 def upload_listing_image(request, listing_id: int,image:UploadedFile = File(...)
                          ):
     listing = get_object_or_404(Listing, id=listing_id)
-    user = verify_user(request)
-    if user.get("user_id") != listing.owner_user_id:
-        raise HttpError(401, "Unauthorized")
 
     listing_image = ListingImage.objects.create(
         listing=listing,
@@ -262,33 +258,10 @@ def delete_single_listing_image(request, listing_id: int, image_id: int):
     image.delete()
     return {"success": True}
 
-# @router.get("/media/{media_id}", response=ListingMediaOut, tags=["media"])
-# def get_media(request, media_id: int):
-#     return get_object_or_404(ListingMedia, id=media_id)
-#
-# #
-# @router.put("/media/{media_id}", response=ListingImageOut, tags=["media"])
-# def update_media(request, media_id: int, data: ListingMediaIn):
-#     media = get_object_or_404(ListingMedia, id=media_id)
-#     listing = get_object_or_404(Listing, id=data.listing_id)
-#
-#     media.listing = listing
-#     media.media_id = data.media_id
-#     media.type = data.type
-#     media.save()
-#
-#     return media
-# #
-
-
-
-
-
 # # #--------------------
 # # #Favotite Endpoints
 # # #--------------------
 class FavoriteIn(Schema):
-    user_id :int
     listing_id:int
 
 class FavoriteOut(Schema):
@@ -300,10 +273,10 @@ class FavoriteOut(Schema):
 
 
 
-@router.post("/favorite/add", response=FavoriteOut)
+@router.post("/favorite/add", response=bool)
 def add_favorite(request, data: FavoriteIn):
-    user = get_object_or_404(User,id=data.user_id)
     listing = get_object_or_404(Listing, id=data.listing_id)
+    user = verify_user(request)
 
     try:
         favorite = Favorite.objects.create(
@@ -313,13 +286,9 @@ def add_favorite(request, data: FavoriteIn):
     except IntegrityError:
         return{
             "error": True,
-            "message":"Already favorited"
+            "message":"Already a favorite"
         }
-    return {
-        "id": favorite.id,
-        "user_id": favorite.user.id,
-        "listing_id": favorite.listing.id,
-     }
+    return True
 
 
 @router.get("/favorites/{user_id}", response=List[FavoriteOut])
