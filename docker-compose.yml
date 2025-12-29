@@ -86,5 +86,48 @@ services:
                 echo 'Cleaning and collecting static files' &&
                 rm -rf static &&
                 python manage.py collectstatic --noinput &&
-                uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --reload
-              "
+                uvicorn core.asgi:application --host 0.0.0.0 --port 8000 --reload 
+      "
+#------------------------------
+#brain service
+#-----------------------------------
+
+
+  brain-srv:
+    build: ./brain_service
+    container_name: brain_srv
+    restart: always
+    depends_on:
+      - auth-srv
+      - listing-srv
+    volumes:
+      - ./brain_service/app:/app
+    ports:
+      - "8002:8000"
+    env_file:
+      - ./env/brain.env
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  #----------------------------------
+  #Region service
+  #----------------------------------
+
+  region-db-srv:
+    image: mysql:8
+    container_name: region-mysql
+    env_file:
+      - ./env/region.env
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./region_service/mysql-init:/docker-entrypoint-initdb.d
+
+  region-srv:
+      build: ./region_service
+      container_name: region-srv
+      depends_on:
+        - region-db-srv
+      env_file:
+        - ./env/region.env
+      ports:
+        - "5000:5000"
