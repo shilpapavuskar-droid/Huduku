@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'inventory',
+    'inventory.apps.InventoryConfig',
 ]
 
 MIDDLEWARE = [
@@ -130,3 +130,4 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+RUN_BOOTSTRAP = os.getenv("RUN_BOOTSTRAP", "1") == "1"

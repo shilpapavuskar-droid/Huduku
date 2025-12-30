@@ -1,64 +1,205 @@
-// javascript
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import "./App.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
-const MEDIA_BASE = process.env.REACT_APP_MEDIA_BASE_URL || "http://localhost:8000";
+const MEDIA_BASE =
+  process.env.REACT_APP_MEDIA_BASE_URL || "http://localhost:8000";
 
-function App() {
+function ListingsPage() {
+  const navigate = useNavigate();
+  const {
+    stateSlug: stateSlugParam,
+    districtSlug: districtSlugParam,
+    citySlug: citySlugParam,
+    categorySlug: categorySlugParam,
+  } = useParams();
+
+  // ---------- auth ----------
+  const [token, setToken] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
-  const [userEmail, setUserEmail] = useState("");
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [loginSource, setLoginSource] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const [listings, setListings] = useState([]);
-  const [categoriesFlat, setCategoriesFlat] = useState([]);
-
-  const [filters, setFilters] = useState({
-    location: "",
-    minPrice: "",
-    maxPrice: "",
-  });
-  const [search, setSearch] = useState("");
-
+  // ---------- categories ----------
+  const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState(null);
 
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [sellModalOpen, setSellModalOpen] = useState(false);
-  const [loginSource, setLoginSource] = useState(null); // "sell" | "header" | null
+  // ---------- listings / filters ----------
+  const [listings, setListings] = useState([]);
+  const [searchText, setSearchText] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
 
+  // ---------- sell modal ----------
+  const [sellModalOpen, setSellModalOpen] = useState(false);
   const [newListing, setNewListing] = useState({
     title: "",
-    category: 1,
-    subcategory: null,
-    price: 0,
-    location: "",
-    description: "",
+    category: null,
+    price: "",
   });
-  const [newListingImages, setNewListingImages] = useState(null); // FileList
+  const [newListingImages, setNewListingImages] = useState(null);
 
-  const isLoggedIn = Boolean(token);
+  // ---------- location hierarchy ----------
+  const [states, setStates] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [localities, setLocalities] = useState([]);
 
+  const [selectedStateSlug, setSelectedStateSlug] = useState(
+    stateSlugParam || null
+  );
+  const [selectedDistrictSlug, setSelectedDistrictSlug] = useState(
+    districtSlugParam || null
+  );
+  const [selectedCitySlug, setSelectedCitySlug] = useState(
+    citySlugParam || null
+  );
+  const [selectedLocalitySlug, setSelectedLocalitySlug] = useState(null);
+
+  // ---------- helpers ----------
+
+  const categoriesByParent = useMemo(() => {
+    const map = {};
+    categories.forEach((cat) => {
+      const parentId = cat.parent_id || 0;
+      if (!map[parentId]) map[parentId] = [];
+      map[parentId].push(cat);
+    });
+    return map;
+  }, [categories]);
+
+  const flatCategories = useMemo(() => categories, [categories]);
+
+  const selectedCategorySlug = useMemo(() => {
+    if (categorySlugParam) return categorySlugParam;
+    const id = selectedSubCategoryId || selectedCategoryId;
+    if (!id) return null;
+    const cat = flatCategories.find((c) => c.id === id);
+    return cat ? cat.slug : null;
+  }, [categorySlugParam, flatCategories, selectedCategoryId, selectedSubCategoryId]);
+
+  // sync selected category when URL has categorySlug
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    if (!categorySlugParam || flatCategories.length === 0) return;
+    const cat = flatCategories.find((c) => c.slug === categorySlugParam);
+    if (cat) {
+      setSelectedCategoryId(cat.parent_id ? cat.parent_id : cat.id);
+      if (cat.parent_id) setSelectedSubCategoryId(cat.id);
+      else setSelectedSubCategoryId(null);
+    }
+  }, [categorySlugParam, flatCategories]);
 
-  useEffect(() => {
-    fetchListings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.location, filters.minPrice, filters.maxPrice, selectedCategoryId, selectedSubCategoryId]);
+  // ---------- fetches ----------
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${API_URL}/categories`);
+      if (!res.ok) {
+        console.error("Failed to fetch categories", await res.text());
+        return;
+      }
+      const data = await res.json();
+      setCategories(data);
+      if (data.length > 0 && !newListing.category) {
+        setNewListing((prev) => ({ ...prev, category: data[0].id }));
+      }
+    } catch (e) {
+      console.error("Error fetching categories", e);
+    }
+  };
+
+  const fetchStates = async () => {
+    try {
+      const res = await fetch(`${API_URL}/states`);
+      if (!res.ok) {
+        console.error("Failed to fetch states", await res.text());
+        return;
+      }
+      const data = await res.json();
+      setStates(data);
+    } catch (e) {
+      console.error("Error fetching states", e);
+    }
+  };
+
+  const fetchDistricts = async (stateSlugVal) => {
+    if (!stateSlugVal) return;
+    try {
+      const res = await fetch(`${API_URL}/states/${stateSlugVal}/districts`);
+      if (!res.ok) {
+        console.error("Failed to fetch districts", await res.text());
+        return;
+      }
+      const data = await res.json();
+      setDistricts(data);
+    } catch (e) {
+      console.error("Error fetching districts", e);
+    }
+  };
+
+  const fetchCities = async (stateSlugVal, districtSlugVal) => {
+    if (!stateSlugVal || !districtSlugVal) return;
+    try {
+      const res = await fetch(
+        `${API_URL}/states/${stateSlugVal}/districts/${districtSlugVal}/cities`
+      );
+      if (!res.ok) {
+        console.error("Failed to fetch cities", await res.text());
+        return;
+      }
+      const data = await res.json();
+      setCities(data);
+    } catch (e) {
+      console.error("Error fetching cities", e);
+    }
+  };
+
+  const fetchLocalities = async (stateSlugVal, districtSlugVal, citySlugVal) => {
+    if (!stateSlugVal || !districtSlugVal || !citySlugVal) return;
+    try {
+      const res = await fetch(
+        `${API_URL}/states/${stateSlugVal}/districts/${districtSlugVal}/cities/${citySlugVal}/localities`
+      );
+      if (!res.ok) {
+        console.error("Failed to fetch localities", await res.text());
+        return;
+      }
+      const data = await res.json();
+      setLocalities(data);
+    } catch (e) {
+      console.error("Error fetching localities", e);
+    }
+  };
 
   const fetchListings = async () => {
     try {
       const params = new URLSearchParams();
 
-      if (filters.location) params.append("location", filters.location);
-      if (filters.minPrice) params.append("min_price", filters.minPrice);
-      if (filters.maxPrice) params.append("max_price", filters.maxPrice);
+      if (searchText) params.append("location", searchText);
+      if (minPrice) params.append("min_price", minPrice);
+      if (maxPrice) params.append("max_price", maxPrice);
 
-      const categoryFilter = selectedSubCategoryId || selectedCategoryId;
-      if (categoryFilter) params.append("category", categoryFilter);
+      if (selectedCategorySlug) {
+        params.append("category_slug", selectedCategorySlug);
+      }
+      if (selectedStateSlug) params.append("state_slug", selectedStateSlug);
+      if (selectedDistrictSlug)
+        params.append("district_slug", selectedDistrictSlug);
+      if (selectedCitySlug) params.append("city_slug", selectedCitySlug);
+      if (selectedLocalitySlug)
+        params.append("locality_slug", selectedLocalitySlug);
 
       const url = `${API_URL}/listings-with-images${
         params.toString() ? `?${params.toString()}` : ""
@@ -72,551 +213,758 @@ function App() {
       }
       const data = await res.json();
       setListings(data);
-    } catch (err) {
-      console.error("Error fetching listings", err);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch(`${API_URL}/categories`);
-      if (!res.ok) {
-        setCategoriesFlat([
-          { id: 1, name: "Electronics", parent_id: null },
-          { id: 2, name: "Furniture", parent_id: null },
-          { id: 11, name: "Phones", parent_id: 1 },
-          { id: 12, name: "Laptops", parent_id: 1 },
-          { id: 21, name: "Chairs", parent_id: 2 },
-          { id: 22, name: "Tables", parent_id: 2 },
-        ]);
-        return;
-      }
-      const data = await res.json();
-      setCategoriesFlat(data);
     } catch (e) {
-      console.error("Error fetching categories, using placeholder.", e);
-      setCategoriesFlat([
-        { id: 1, name: "Electronics", parent_id: null },
-        { id: 2, name: "Furniture", parent_id: null },
-        { id: 11, name: "Phones", parent_id: 1 },
-        { id: 12, name: "Laptops", parent_id: 1 },
-        { id: 21, name: "Chairs", parent_id: 2 },
-        { id: 22, name: "Tables", parent_id: 2 },
-      ]);
+      console.error("Error fetching listings", e);
     }
   };
 
-  const categoriesTree = useMemo(() => {
-    const roots = categoriesFlat.filter(c => c.parent_id == null);
-    return roots.map(root => ({
-      ...root,
-      subcategories: categoriesFlat.filter(c => c.parent_id === root.id),
-    }));
-  }, [categoriesFlat]);
+  // ---------- effects ----------
 
-  const register = async () => {
-    try {
-      const res = await fetch(`${API_URL}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(
-          data?.detail || data?.error || data?.message || "Registration failed"
-        );
-        return;
-      }
-      alert("Registered successfully. Please log in.");
-    } catch (e) {
-      console.error(e);
-      alert("Network error during registration.");
+  useEffect(() => {
+    fetchCategories();
+    fetchStates();
+  }, []);
+
+  // initialize hierarchy from URL slugs
+  useEffect(() => {
+    if (stateSlugParam) {
+      setSelectedStateSlug(stateSlugParam);
+      fetchDistricts(stateSlugParam);
     }
-  };
-
-  const login = async () => {
-    try {
-      const res = await fetch(`${API_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.token) {
-        alert(data?.detail || data?.error || data?.message || "Login failed");
-        setToken("");
-        return;
-      }
-
-      setToken(data.token);
-      setUserEmail(email);
-      setAuthModalOpen(false);
-
-      if (loginSource === "sell") {
-        setSellModalOpen(true);
-      }
-      setLoginSource(null);
-    } catch (e) {
-      console.error(e);
-      setToken("");
-      alert("Network error during login.");
+    if (stateSlugParam && districtSlugParam) {
+      setSelectedDistrictSlug(districtSlugParam);
+      fetchCities(stateSlugParam, districtSlugParam);
     }
-  };
-
-  const logout = () => {
-    setToken("");
-    setUserEmail("");
-    setAuthModalOpen(false);
-    setSellModalOpen(false);
-    setLoginSource(null);
-    setSelectedCategoryId(null);
-    setSelectedSubCategoryId(null);
-  };
-
-  const onSellClick = () => {
-    if (!isLoggedIn) {
-      setLoginSource("sell");
-      setAuthModalOpen(true);
-    } else {
-      setSellModalOpen(true);
+    if (stateSlugParam && districtSlugParam && citySlugParam) {
+      setSelectedCitySlug(citySlugParam);
+      fetchLocalities(stateSlugParam, districtSlugParam, citySlugParam);
     }
-  };
+  }, [stateSlugParam, districtSlugParam, citySlugParam]);
 
-  const createListing = async () => {
-    if (!isLoggedIn) {
-      alert("Please log in first.");
-      setLoginSource("sell");
-      setAuthModalOpen(true);
-      return;
+  // normalize hierarchy so higher level clears deeper filters
+  useEffect(() => {
+    // only state -> clear district, city, locality
+    if (selectedStateSlug && !selectedDistrictSlug) {
+      setSelectedDistrictSlug(null);
+      setSelectedCitySlug(null);
+      setSelectedLocalitySlug(null);
     }
 
-    if (!newListing.title || !newListing.location || !newListing.price) {
-      alert("Please fill in title, price and location.");
-      return;
+    // state + district, but no city -> clear city, locality
+    if (selectedStateSlug && selectedDistrictSlug && !selectedCitySlug) {
+      setSelectedCitySlug(null);
+      setSelectedLocalitySlug(null);
     }
 
-    if (!newListingImages || newListingImages.length === 0) {
-      alert("Please upload at least one image.");
-      return;
+    // state + district + city, but no locality -> clear locality
+    if (
+      selectedStateSlug &&
+      selectedDistrictSlug &&
+      selectedCitySlug &&
+      !selectedLocalitySlug
+    ) {
+      setSelectedLocalitySlug(null);
     }
+  }, [
+    selectedStateSlug,
+    selectedDistrictSlug,
+    selectedCitySlug,
+    selectedLocalitySlug,
+  ]);
 
-    try {
-      const body = {
-        title: newListing.title,
-        category: newListing.category,
-        price: newListing.price,
-        location: newListing.location,
-        is_active: true,
-      };
+  useEffect(() => {
+    fetchListings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    searchText,
+    minPrice,
+    maxPrice,
+    selectedCategorySlug,
+    selectedStateSlug,
+    selectedDistrictSlug,
+    selectedCitySlug,
+    selectedLocalitySlug,
+  ]);
 
-      const res = await fetch(`${API_URL}/listing/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
+  // ---------- URL builder ----------
 
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data?.detail || data?.error || data?.message || "Create failed");
-        return;
-      }
+  const buildListingsPath = (
+    stateSlugVal,
+    districtSlugVal,
+    citySlugVal,
+    categorySlugVal
+  ) => {
+    const parts = ["/listings"];
 
-      const listingId = data.id;
-      if (!listingId) {
-        alert("Listing created but ID missing in response.");
-        return;
-      }
-
-      for (let i = 0; i < newListingImages.length; i++) {
-        const file = newListingImages[i];
-        const formData = new FormData();
-        formData.append("image", file);
-
-        const imgRes = await fetch(
-          `${API_URL}/listing/${listingId}/image/upload`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          }
-        );
-
-        if (!imgRes.ok) {
-          console.error("Image upload failed", await imgRes.text());
-          alert("One of the images failed to upload.");
+    if (stateSlugVal) {
+      parts.push(stateSlugVal);
+      if (districtSlugVal) {
+        parts.push(districtSlugVal);
+        if (citySlugVal) {
+          parts.push(citySlugVal);
         }
       }
+    }
 
-      alert("Listing created with images.");
-      setSellModalOpen(false);
-      setNewListing({
-        title: "",
-        category: 1,
-        subcategory: null,
-        price: 0,
-        location: "",
-        description: "",
+    if (categorySlugVal) {
+      parts.push("category", categorySlugVal);
+    }
+
+    return parts.join("/").replace(/\/+/g, "/");
+  };
+
+  // ---------- handlers: location selection ----------
+
+  const onStateSelect = async (stateSlugVal) => {
+    const value = stateSlugVal || null;
+    setSelectedStateSlug(value);
+    setSelectedDistrictSlug(null);
+    setSelectedCitySlug(null);
+    setSelectedLocalitySlug(null);
+    setDistricts([]);
+    setCities([]);
+    setLocalities([]);
+    navigate(
+      buildListingsPath(value, null, null, selectedCategorySlug || categorySlugParam)
+    );
+    if (value) await fetchDistricts(value);
+  };
+
+  const onDistrictSelect = async (districtSlugVal) => {
+    const value = districtSlugVal || null;
+    setSelectedDistrictSlug(value);
+    setSelectedCitySlug(null);
+    setSelectedLocalitySlug(null);
+    setCities([]);
+    setLocalities([]);
+    navigate(
+      buildListingsPath(
+        selectedStateSlug,
+        value,
+        null,
+        selectedCategorySlug || categorySlugParam
+      )
+    );
+    if (selectedStateSlug && value) {
+      await fetchCities(selectedStateSlug, value);
+    }
+  };
+
+  const onCitySelect = async (citySlugVal) => {
+    const value = citySlugVal || null;
+    setSelectedCitySlug(value);
+    setSelectedLocalitySlug(null);
+    setLocalities([]);
+    navigate(
+      buildListingsPath(
+        selectedStateSlug,
+        selectedDistrictSlug,
+        value,
+        selectedCategorySlug || categorySlugParam
+      )
+    );
+    if (selectedStateSlug && selectedDistrictSlug && value) {
+      await fetchLocalities(selectedStateSlug, selectedDistrictSlug, value);
+    }
+  };
+
+  const onLocalitySelect = (localitySlugVal) => {
+    const value = localitySlugVal || null;
+    setSelectedLocalitySlug(value);
+
+    // locality should not change the path segments, only query filtering
+    navigate(
+      buildListingsPath(
+        selectedStateSlug,
+        selectedDistrictSlug,
+        selectedCitySlug,
+        selectedCategorySlug || categorySlugParam
+      )
+    );
+  };
+
+  // ---------- handlers: category selection ----------
+
+  const handleCategoryClick = (cat) => {
+    setSelectedCategoryId(cat.id);
+    setSelectedSubCategoryId(null);
+    navigate(
+      buildListingsPath(
+        selectedStateSlug,
+        selectedDistrictSlug,
+        selectedCitySlug,
+        cat.slug
+      )
+    );
+  };
+
+  const handleSubCategoryClick = (sub) => {
+    setSelectedCategoryId(sub.parent_id || sub.id);
+    setSelectedSubCategoryId(sub.id);
+    navigate(
+      buildListingsPath(
+        selectedStateSlug,
+        selectedDistrictSlug,
+        selectedCitySlug,
+        sub.slug
+      )
+    );
+  };
+
+  // ---------- auth handlers ----------
+
+  const openLoginModal = (source = null) => {
+    setLoginSource(source);
+    setIsRegisterMode(false);
+    setAuthModalOpen(true);
+  };
+
+  const openRegisterModal = () => {
+    setIsRegisterMode(true);
+    setAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setAuthModalOpen(false);
+    setEmail("");
+    setPassword("");
+    setLoginSource(null);
+  };
+
+  const handleRegisterOrLogin = async () => {
+    const endpoint = isRegisterMode ? "/register" : "/login";
+    try {
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-      setNewListingImages(null);
-      fetchListings();
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data?.detail || data?.error || "Auth failed");
+        return;
+      }
+      if (!isRegisterMode) {
+        const t = data?.access_token || data?.token;
+        if (!t) {
+          alert("Token missing in response");
+          return;
+        }
+        setToken(`Bearer ${t}`);
+        setIsLoggedIn(true);
+        if (loginSource === "sell") {
+          setSellModalOpen(true);
+        }
+      }
+      closeAuthModal();
     } catch (e) {
-      console.error(e);
-      alert("Network error during listing creation.");
+      console.error("Auth error", e);
+      alert("Network error");
     }
   };
 
-  const onCategoryClick = categoryId => {
-    setSelectedCategoryId(categoryId);
-    setSelectedSubCategoryId(null);
+  const handleLogout = () => {
+    setToken(null);
+    setIsLoggedIn(false);
   };
 
-  const onSubCategoryClick = (categoryId, subCategoryId) => {
-    setSelectedCategoryId(categoryId);
-    setSelectedSubCategoryId(subCategoryId);
-  };
+  // ---------- sell / listing creation ----------
 
-  const clearCategoryFilter = () => {
-    setSelectedCategoryId(null);
-    setSelectedSubCategoryId(null);
-  };
-
-  const applyClientFilters = item => {
-    if (search) {
-      const s = search.toLowerCase();
-      const title = item.title?.toLowerCase() || "";
-      const desc = item.description?.toLowerCase() || "";
-      if (!title.includes(s) && !desc.includes(s)) return false;
+  const openSellFlow = () => {
+    if (!isLoggedIn) {
+      openLoginModal("sell");
+      return;
     }
-    return true;
+    setSellModalOpen(true);
   };
 
-  const filteredListings = listings.filter(applyClientFilters);
+  const closeSellModal = () => {
+    setSellModalOpen(false);
+    setNewListing({
+      title: "",
+      category: categories[0]?.id || null,
+      price: "",
+    });
+    setNewListingImages(null);
+  };
+
+  const handleNewListingChange = (field, value) => {
+    setNewListing((prev) => ({ ...prev, [field]: value }));
+  };
+
+const createListing = async () => {
+  if (!isLoggedIn || !token) {
+    alert("Please log in first.");
+    openLoginModal("sell");
+    return;
+  }
+
+  if (!newListing.title || !newListing.price || !newListing.category) {
+    alert("Title, price, and category are required.");
+    return;
+  }
+
+  if (!selectedStateSlug || !selectedDistrictSlug || !selectedCitySlug || !selectedLocalitySlug) {
+    alert("Please select state, district, city and locality as location.");
+    return;
+  }
+
+  if (!newListingImages || newListingImages.length === 0) {
+    alert("Please upload at least one image.");
+    return;
+  }
+
+  try {
+    const body = {
+      title: newListing.title,
+      category: newListing.category,
+      price: parseFloat(newListing.price),
+      state_slug: selectedStateSlug,
+      district_slug: selectedDistrictSlug,
+      city_slug: selectedCitySlug,
+      locality_slug: selectedLocalitySlug,
+      is_active: true,
+    };
+
+    const res = await fetch(`${API_URL}/listing/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: token,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data?.detail || data?.error || data?.message || "Create failed");
+      return;
+    }
+
+    const listingId = data.id;
+    if (!listingId) {
+      alert("Listing created but ID missing in response.");
+      return;
+    }
+
+    for (let i = 0; i < newListingImages.length; i++) {
+      const file = newListingImages[i];
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const imgRes = await fetch(
+        `${API_URL}/listing/${listingId}/image/upload`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: token,
+          },
+          body: formData,
+        }
+      );
+
+      if (!imgRes.ok) {
+        console.error("Image upload failed", await imgRes.text());
+      }
+    }
+
+    alert("Listing created with images.");
+    closeSellModal();
+    fetchListings();
+  } catch (e) {
+    console.error("Error creating listing", e);
+    alert("Network error during listing creation.");
+  }
+};
+
+  // ---------- render helpers ----------
+
+  const renderCategoryMenu = () => {
+    const topLevel = categoriesByParent[0] || [];
+
+    return (
+      <nav className="category-bar">
+        {topLevel.map((cat) => {
+          const children = categoriesByParent[cat.id] || [];
+          const isActiveTop =
+            (!selectedSubCategoryId && selectedCategoryId === cat.id) ||
+            selectedCategorySlug === cat.slug;
+
+          return (
+            <div key={cat.id} className="category-top-item">
+              <button
+                type="button"
+                className={`cat-btn ${isActiveTop ? "active" : ""}`}
+                onClick={() => handleCategoryClick(cat)}
+              >
+                {cat.name}
+              </button>
+
+              {children.length > 0 && (
+                <div className="dropdown">
+                  {children.map((sub) => {
+                    const isActiveSub =
+                      selectedSubCategoryId === sub.id ||
+                      selectedCategorySlug === sub.slug;
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        className={isActiveSub ? "dropdown-item active" : "dropdown-item"}
+                        onClick={() => handleSubCategoryClick(sub)}
+                      >
+                        {sub.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    );
+  };
+
+  const renderLocationFilterControls = () => (
+    <div className="filter-group">
+      <label className="field-inline">
+        <span>State</span>
+        <select
+          value={selectedStateSlug || ""}
+          onChange={(e) => onStateSelect(e.target.value || null)}
+        >
+          <option value="">All states</option>
+          {states.map((s) => (
+            <option key={s.code} value={s.slug}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selectedStateSlug && (
+        <label className="field-inline">
+          <span>District</span>
+          <select
+            value={selectedDistrictSlug || ""}
+            onChange={(e) => onDistrictSelect(e.target.value || null)}
+          >
+            <option value="">All districts</option>
+            {districts.map((d) => (
+              <option key={d.code} value={d.slug}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {selectedDistrictSlug && (
+        <label className="field-inline">
+          <span>City</span>
+          <select
+            value={selectedCitySlug || ""}
+            onChange={(e) => onCitySelect(e.target.value || null)}
+          >
+            <option value="">All cities</option>
+            {cities.map((c) => (
+              <option key={c.code} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {selectedCitySlug && (
+        <label className="field-inline">
+          <span>Locality</span>
+          <select
+            value={selectedLocalitySlug || ""}
+            onChange={(e) => onLocalitySelect(e.target.value || null)}
+          >
+            <option value="">All localities</option>
+            {localities.map((l) => (
+              <option key={l.code} value={l.slug}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+
+  const renderLocationSelectorForForm = () => (
+    <div className="location-selector">
+      <select
+        value={selectedStateSlug || ""}
+        onChange={(e) => onStateSelect(e.target.value || null)}
+      >
+        <option value="">Select state</option>
+        {states.map((s) => (
+          <option key={s.code} value={s.slug}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+
+      {selectedStateSlug && (
+        <select
+          value={selectedDistrictSlug || ""}
+          onChange={(e) => onDistrictSelect(e.target.value || null)}
+        >
+          <option value="">Select district</option>
+          {districts.map((d) => (
+            <option key={d.code} value={d.slug}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {selectedDistrictSlug && (
+        <select
+          value={selectedCitySlug || ""}
+          onChange={(e) => onCitySelect(e.target.value || null)}
+        >
+          <option value="">Select city</option>
+          {cities.map((c) => (
+            <option key={c.code} value={c.slug}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {selectedCitySlug && (
+        <select
+          value={selectedLocalitySlug || ""}
+          onChange={(e) => onLocalitySelect(e.target.value || null)}
+        >
+          <option value="">Select locality</option>
+          {localities.map((l) => (
+            <option key={l.code} value={l.slug}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+
+  const renderListingsGrid = () => {
+    if (!listings || listings.length === 0) {
+      return <div className="empty-state">No listings found.</div>;
+    }
+
+    return (
+      <div className="listing-grid">
+        {listings.map((listing) => {
+          const primaryImage =
+            listing.images && listing.images.length > 0
+              ? listing.images[0]
+              : null;
+          const imgSrc = primaryImage
+            ? `${MEDIA_BASE}${primaryImage.image}`
+            : "https://via.placeholder.com/300x200?text=No+Image";
+
+          return (
+            <div key={listing.id} className="listing-card">
+              <img
+                src={imgSrc}
+                alt={listing.title}
+                className="listing-image"
+              />
+              <div className="listing-info">
+                <h3>{listing.title}</h3>
+                <p className="price">₹ {listing.price}</p>
+                <p className="location">{listing.location}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ---------- main render ----------
 
   return (
     <div className="page-root">
       <header className="navbar">
         <div className="logo">Huduku</div>
-
-        <nav className="category-bar">
-          <button className="category-all" onClick={clearCategoryFilter}>
-            All
-          </button>
-          {categoriesTree.map(cat => (
-            <div key={cat.id} className="category-top-item">
-              <button
-                className={
-                  "category-top-button" +
-                  (selectedCategoryId === cat.id &&
-                  selectedSubCategoryId == null
-                    ? " active"
-                    : "")
-                }
-                onClick={() => onCategoryClick(cat.id)}
-              >
-                {cat.name}
-              </button>
-              {cat.subcategories && cat.subcategories.length > 0 && (
-                <div className="dropdown">
-                  {cat.subcategories.map(sub => (
-                    <button
-                      key={sub.id}
-                      className={
-                        "dropdown-item" +
-                        (selectedSubCategoryId === sub.id ? " active" : "")
-                      }
-                      onClick={() => onSubCategoryClick(cat.id, sub.id)}
-                    >
-                      {sub.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </nav>
-
+        {renderCategoryMenu()}
         <div className="nav-actions">
-          <button
-            className="btn secondary"
-            onClick={() => {
-              if (!isLoggedIn) {
-                setLoginSource("header");
-                setAuthModalOpen(true);
-              }
-            }}
-            disabled={isLoggedIn}
-          >
-            Register
-          </button>
-
-          {!isLoggedIn ? (
-            <button
-              className="btn secondary"
-              onClick={() => {
-                setLoginSource("header");
-                setAuthModalOpen(true);
-              }}
-            >
-              Login
-            </button>
-          ) : (
-            <button className="btn secondary" onClick={logout}>
+          {isLoggedIn ? (
+            <button className="btn" onClick={handleLogout}>
               Logout
             </button>
+          ) : (
+            <>
+              <button className="btn" onClick={() => openLoginModal(null)}>
+                Login
+              </button>
+              <button className="btn" onClick={openRegisterModal}>
+                Register
+              </button>
+            </>
           )}
-
-          <button className="btn primary" onClick={onSellClick}>
+          <button className="btn primary" onClick={openSellFlow}>
             Sell
           </button>
-
-          <span className="status">
-            {isLoggedIn ? `Logged in as ${userEmail}` : "Guest"}
-          </span>
         </div>
       </header>
 
-      <div className="layout">
-        <div className="main-content">
-          <section className="filter-bar">
-            <div className="filter-group">
-              <label className="field-inline">
-                <span>Search</span>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search listings..."
-                />
-              </label>
-              <button className="btn small" onClick={fetchListings}>
-                Search
-              </button>
-            </div>
+      <main className="layout">
+        <section className="filter-bar">
+          <div className="filter-group">
+            <input
+              type="text"
+              placeholder="Search by text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+            <input
+              type="number"
+              placeholder="Min price"
+              value={minPrice}
+              onChange={(e) => setMinPrice(e.target.value)}
+            />
+            <input
+              type="number"
+              placeholder="Max price"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+            />
+          </div>
+          {renderLocationFilterControls()}
+        </section>
 
-            <div className="filter-group">
-              <label className="field-inline">
-                <span>Location</span>
-                <input
-                  type="text"
-                  value={filters.location}
-                  onChange={e =>
-                    setFilters({ ...filters, location: e.target.value })
-                  }
-                  placeholder="City, country..."
-                />
-              </label>
-              <label className="field-inline">
-                <span>Min price</span>
-                <input
-                  type="number"
-                  value={filters.minPrice}
-                  onChange={e =>
-                    setFilters({ ...filters, minPrice: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field-inline">
-                <span>Max price</span>
-                <input
-                  type="number"
-                  value={filters.maxPrice}
-                  onChange={e =>
-                    setFilters({ ...filters, maxPrice: e.target.value })
-                  }
-                />
-              </label>
-            </div>
-          </section>
-
-          <main className="listing-section">
-            {filteredListings.length === 0 && (
-              <div className="empty-state">No listings found.</div>
-            )}
-            <div className="listing-grid">
-              {filteredListings.map(item => {
-                const relImage
-
-
-                 =
-                  item.images && item.images.length > 0
-                    ? item.images[0].image
-                    : null;
-
-                const firstImage = relImage ? MEDIA_BASE + relImage : null;
-                return (
-                  <div
-                    key={item.id || `${item.title}-${item.price}`}
-                    className="listing-card"
-                  >
-                    {firstImage && (
-                      <div className="listing-image-wrapper">
-                        <img
-                          src={firstImage}
-                          alt={item.title}
-                          className="listing-image"
-                        />
-                      </div>
-                    )}
-                    <h3 className="listing-title">{item.title}</h3>
-                    <p className="listing-location">{item.location}</p>
-                    <p className="listing-price">${item.price}</p>
-                    <p className="listing-desc">
-                      {item.description || "No description provided."}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </main>
-        </div>
-      </div>
+        <section className="listing-section">{renderListingsGrid()}</section>
+      </main>
 
       {authModalOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setAuthModalOpen(false);
-            setLoginSource(null);
-          }}
-        >
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Register / Login</h2>
-            <label className="field">
-              <span>Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </label>
-            <div className="button-row">
-              <button
-                className="btn secondary"
-                onClick={register}
-                disabled={isLoggedIn}
-              >
-                Register
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>{isRegisterMode ? "Register" : "Login"}</h2>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="btn" onClick={closeAuthModal}>
+                Cancel
               </button>
-              {!isLoggedIn ? (
-                <button className="btn primary" onClick={login}>
-                  Login
-                </button>
-              ) : (
-                <button className="btn primary" onClick={logout}>
-                  Logout
-                </button>
-              )}
+              <button className="btn primary" onClick={handleRegisterOrLogin}>
+                {isRegisterMode ? "Register" : "Login"}
+              </button>
             </div>
+            <button
+              className="link-btn"
+              onClick={() => setIsRegisterMode((v) => !v)}
+            >
+              {isRegisterMode
+                ? "Already have an account? Login"
+                : "New user? Register"}
+            </button>
           </div>
         </div>
       )}
 
       {sellModalOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setSellModalOpen(false)}
-        >
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop">
+          <div className="modal">
             <h2>Create Listing</h2>
-            <label className="field">
-              <span>Title</span>
-              <input
-                value={newListing.title}
-                onChange={e =>
-                  setNewListing({ ...newListing, title: e.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Category ID</span>
-              <input
-                type="number"
-                value={newListing.category}
-                onChange={e =>
-                  setNewListing({
-                    ...newListing,
-                    category: Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Price</span>
-              <input
-                type="number"
-                value={newListing.price}
-                onChange={e =>
-                  setNewListing({
-                    ...newListing,
-                    price: Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label className="field">
+            <input
+              type="text"
+              placeholder="Title"
+              value={newListing.title}
+              onChange={(e) =>
+                handleNewListingChange("title", e.target.value)
+              }
+            />
+            <input
+              type="number"
+              placeholder="Price"
+              value={newListing.price}
+              onChange={(e) =>
+                handleNewListingChange("price", e.target.value)
+              }
+            />
+            <select
+              value={newListing.category || ""}
+              onChange={(e) =>
+                handleNewListingChange("category", Number(e.target.value))
+              }
+            >
+              <option value="">Select category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <div className="form-block">
               <span>Location</span>
-              <input
-                value={newListing.location}
-                onChange={e =>
-                  setNewListing({
-                    ...newListing,
-                    location: e.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Description</span>
-              <textarea
-                value={newListing.description}
-                onChange={e =>
-                  setNewListing({
-                    ...newListing,
-                    description: e.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Images \* (at least one)</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={e => setNewListingImages(e.target.files)}
-              />
-            </label>
-            <div className="button-row">
-              <button
-                className="btn secondary"
-                onClick={() => setSellModalOpen(false)}
-              >
+              {renderLocationSelectorForForm()}
+            </div>
+
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setNewListingImages(e.target.files)}
+            />
+
+            <div className="modal-actions">
+              <button className="btn" onClick={closeSellModal}>
                 Cancel
               </button>
               <button className="btn primary" onClick={createListing}>
-                Publish
+                Create
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        {/* redirect `/` -> `/listings` */}
+        <Route path="/" element={<Navigate to="/listings" replace />} />
+
+        <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/listings/category/:categorySlug" element={<ListingsPage />} />
+        <Route path="/listings/:stateSlug" element={<ListingsPage />} />
+        <Route
+          path="/listings/:stateSlug/:districtSlug"
+          element={<ListingsPage />}
+        />
+        <Route
+          path="/listings/:stateSlug/:districtSlug/:citySlug"
+          element={<ListingsPage />}
+        />
+        <Route
+          path="/listings/:stateSlug/:districtSlug/:citySlug/category/:categorySlug"
+          element={<ListingsPage />}
+        />
+      </Routes>
+    </Router>
   );
 }
 

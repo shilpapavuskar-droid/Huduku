@@ -1,5 +1,4 @@
-# python
-from flask import Flask, jsonify
+from flask import Flask, jsonify ,request
 import mysql.connector
 import time
 import os
@@ -12,11 +11,6 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
 
-print("DB_HOST:", os.getenv("DB_HOST"))
-print("DB_PORT:", os.getenv("DB_PORT"))
-print("DB_USER:", os.getenv("DB_USER"))
-print("DB_NAME:", os.getenv("DB_NAME"))
-print("DB_PASSWORD:", os.getenv("DB_PASSWORD") )
 
 def get_db_connection():
     return mysql.connector.connect(
@@ -43,6 +37,7 @@ def wait_for_db(max_retries=30, delay_seconds=2):
             retries += 1
     raise RuntimeError("Region DB did not become ready in time")
 
+
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -50,8 +45,9 @@ def init_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS states (
-        code INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE
+            code INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            slug VARCHAR(255) NOT NULL UNIQUE
         )
         """
     )
@@ -59,14 +55,17 @@ def init_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS district (
-        code INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        state_code INT NOT NULL,
-        CONSTRAINT fk_district_state
-        FOREIGN KEY (state_code) REFERENCES states(code)
-        ON DELETE CASCADE,
-        CONSTRAINT uq_district_name_per_state
-        UNIQUE (name, state_code)
+            code INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL,
+            state_code INT NOT NULL,
+            CONSTRAINT fk_district_state
+                FOREIGN KEY (state_code) REFERENCES states(code)
+                ON DELETE CASCADE,
+            CONSTRAINT uq_district_name_per_state
+                UNIQUE (name, state_code),
+            CONSTRAINT uq_district_slug_per_state
+                UNIQUE (slug, state_code)
         )
         """
     )
@@ -74,14 +73,17 @@ def init_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS city (
-        code INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        district_code INT NOT NULL,
-        CONSTRAINT fk_city_district
-        FOREIGN KEY (district_code) REFERENCES district(code)
-        ON DELETE CASCADE,
-        CONSTRAINT uq_city_name_per_district
-        UNIQUE (name, district_code)
+            code INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL,
+            district_code INT NOT NULL,
+            CONSTRAINT fk_city_district
+                FOREIGN KEY (district_code) REFERENCES district(code)
+                ON DELETE CASCADE,
+            CONSTRAINT uq_city_name_per_district
+                UNIQUE (name, district_code),
+            CONSTRAINT uq_city_slug_per_district
+                UNIQUE (slug, district_code)
         )
         """
     )
@@ -89,14 +91,17 @@ def init_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS locality (
-        code INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        city_code INT NOT NULL,
-        CONSTRAINT fk_locality_city
-        FOREIGN KEY (city_code) REFERENCES city(code)
-        ON DELETE CASCADE,
-        CONSTRAINT uq_locality_name_per_city
-        UNIQUE (name, city_code)
+            code INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL,
+            city_code INT NOT NULL,
+            CONSTRAINT fk_locality_city
+                FOREIGN KEY (city_code) REFERENCES city(code)
+                ON DELETE CASCADE,
+            CONSTRAINT uq_locality_name_per_city
+                UNIQUE (name, city_code),
+            CONSTRAINT uq_locality_slug_per_city
+                UNIQUE (slug, city_code)
         )
         """
     )
@@ -107,15 +112,29 @@ def init_db():
     print("Region DB tables are ensured.")
 
 
+
 @app.route("/states", methods=["GET"])
 def get_states():
+    slug = request.args.get("slug")
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT code, name FROM states")
-    states = [{"code": code, "name": name} for code, name in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    return jsonify(states)
+    try:
+        if slug:
+            cursor.execute(
+                "SELECT code, name, slug FROM states WHERE slug = %s",
+                (slug,),
+            )
+        else:
+            cursor.execute("SELECT code, name, slug FROM states")
+        rows = cursor.fetchall()
+        states = [
+            {"code": code, "name": name, "slug": s}
+            for code, name, s in rows
+        ]
+        return jsonify(states)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @app.route("/states/<int:state_code>/districts", methods=["GET"])
@@ -123,9 +142,13 @@ def get_districts(state_code):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT code, name FROM district WHERE state_code = %s", (state_code,)
+        "SELECT code, name, slug FROM district WHERE state_code = %s",
+        (state_code,),
     )
-    districts = [{"code": code, "name": name} for code, name in cursor.fetchall()]
+    districts = [
+        {"code": code, "name": name, "slug": slug}
+        for code, name, slug in cursor.fetchall()
+    ]
     cursor.close()
     conn.close()
     return jsonify(districts)
@@ -139,9 +162,13 @@ def get_cities(state_code, district_code):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT code, name FROM city WHERE district_code = %s", (district_code,)
+        "SELECT code, name, slug FROM city WHERE district_code = %s",
+        (district_code,),
     )
-    cities = [{"code": code, "name": name} for code, name in cursor.fetchall()]
+    cities = [
+        {"code": code, "name": name, "slug": slug}
+        for code, name, slug in cursor.fetchall()
+    ]
     cursor.close()
     conn.close()
     return jsonify(cities)
@@ -155,10 +182,12 @@ def get_localities(state_code, district_code, city_code):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT code, name FROM locality WHERE city_code = %s", (city_code,)
+        "SELECT code, name, slug FROM locality WHERE city_code = %s",
+        (city_code,),
     )
     localities = [
-        {"code": code, "name": name} for code, name in cursor.fetchall()
+        {"code": code, "name": name, "slug": slug}
+        for code, name, slug in cursor.fetchall()
     ]
     cursor.close()
     conn.close()
@@ -173,14 +202,14 @@ def get_locality(state_code, district_code, city_code, locality_code):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT code, name FROM locality WHERE code = %s AND city_code = %s",
+        "SELECT code, name, slug FROM locality WHERE code = %s AND city_code = %s",
         (locality_code, city_code),
     )
     row = cursor.fetchone()
     cursor.close()
     conn.close()
     if row:
-        return jsonify({"code": row[0], "name": row[1]})
+        return jsonify({"code": row[0], "name": row[1], "slug": row[2]})
     else:
         return jsonify({"error": "Locality not found"}), 404
 
