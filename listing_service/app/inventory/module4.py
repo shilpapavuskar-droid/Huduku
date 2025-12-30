@@ -84,9 +84,10 @@ def delete_category(request, category_id: int):
 class ListingIn(Schema):
     user_id: int
     title: str
-    category: int           # send category_id
+    category: int
     price: float
-    location: str
+    locality_slug: str   # still stored separately if you want
+    location: str        # full path: "state/district/city/locality"
     is_active: Optional[bool] = True
 
 
@@ -103,12 +104,19 @@ class ListingOut(Schema):
 
 
 @router.get("/listings", response=List[ListingOut])
-def get_listings(request,location: Optional[str] = Query(None),
+def get_listings(
+    request,
+    location: Optional[str] = Query(None),
     category: Optional[int] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
-    user_id: Optional[int] = Query(None)):
-
+    user_id: Optional[int] = Query(None),
+    state_slug: Optional[str] = Query(None),
+    district_slug: Optional[str] = Query(None),
+    city_slug: Optional[str] = Query(None),
+    locality_slug: Optional[str] = Query(None),
+    category_slug: Optional[str] = Query(None),
+):
     qs = Listing.objects.filter(is_active=True)
 
     if location:
@@ -126,21 +134,38 @@ def get_listings(request,location: Optional[str] = Query(None),
     if user_id is not None:
         qs = qs.filter(owner_user_id=user_id)
 
+    # slug-based category filter
+    if category_slug:
+        qs = qs.filter(category__slug=category_slug)
+
+    # location slug filter: you may choose a scheme; here we store locality_slug in Listing.location
+    if locality_slug:
+        qs = qs.filter(location__endswith=f"/{locality_slug}")
+    elif city_slug and state_slug and district_slug:
+        # state/district/city prefix
+        qs = qs.filter(
+            location__startswith=f"{state_slug}/{district_slug}/{city_slug}/"
+        )
+    elif district_slug and state_slug:
+        # state/district prefix
+        qs = qs.filter(location__startswith=f"{state_slug}/{district_slug}/")
+    elif state_slug:
+        # state prefix
+        qs = qs.filter(location__startswith=f"{state_slug}/")
+
     return list(qs)
 
 @router.post("/listing/create", response=ListingOut)
 def create_listing(request, data: ListingIn):
-    # Get category instance
-    category = get_object_or_404(Category,id=data.category)
-    # create listing
-    data.category =category
+    category = get_object_or_404(Category, id=data.category)
+
     listing = Listing.objects.create(
         title=data.title,
         category=category,
         price=data.price,
-        location=data.location,
+        location=data.location,  # hierarchical path from brain
         is_active=data.is_active,
-        owner_user_id=data.user_id
+        owner_user_id=data.user_id,
     )
     return listing
 # #
@@ -180,9 +205,6 @@ def update_listing(request, listing_id:int , data: ListingUpdateIn):
 @router.delete("/listing/{listing_id}")
 def delete_listing(request, listing_id: int):
     listing = get_object_or_404(Listing, id=listing_id)
-    user = verify_user(request)
-    if user.get("user_id") != listing.owner_user_id and not user.get("is_staff", False):
-        raise HttpError(401, "Unauthorized")
     listing.delete()
     return {"success": True}
 #
