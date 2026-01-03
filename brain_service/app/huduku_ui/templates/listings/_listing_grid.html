@@ -1,0 +1,9 @@
+<div class="hk-grid">
+    {% if listings %}
+        {% for listing in listings %}
+            {% include "listings/_listing_card.html" with listing=listing %}
+        {% endfor %}
+    {% else %}
+        <p>No listings found.</p>
+    {% endif %}
+</div>

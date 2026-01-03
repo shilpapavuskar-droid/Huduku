@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Find listings{% endblock %}
+
+{% block content %}
+<section class="hk-page">
+    <aside class="hk-sidebar">
+        {% include "listings/_filters.html" %}
+    </aside>
+
+    <section class="hk-content">
+        <form
+            id="hk-search-form"
+            class="hk-search-bar"
+            hx-get="{% url 'huduku_ui:listing_grid_partial' %}"
+            hx-target="#hk-listing-grid"
+            hx-push-url="false"
+        >
+            {% csrf_token %}
+            <input
+                type="text"
+                name="q"
+                placeholder="Search listings..."
+                value="{{ search_q }}"
+                class="hk-input hk-input-search"
+            />
+            <input
+                type="number"
+                name="min_price"
+                placeholder="Min price"
+                value="{{ min_price }}"
+                class="hk-input hk-input-price"
+            />
+            <input
+                type="number"
+                name="max_price"
+                placeholder="Max price"
+                value="{{ max_price }}"
+                class="hk-input hk-input-price"
+            />
+            <button type="submit" class="hk-btn hk-btn-primary">Search</button>
+        </form>
+
+        <div id="hk-listing-grid">
+            {% include "listings/_listing_grid.html" %}
+        </div>
+    </section>
+</section>
+{% endblock %}

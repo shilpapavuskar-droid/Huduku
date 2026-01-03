@@ -1,0 +1,102 @@
+ <!-- file: `brain_service/app/huduku_ui/templates/listings/detail.html` -->
+{% extends "base.html" %}
+{% block title %}{{ listing.title }}{% endblock %}
+
+{% block content %}
+<section class="hk-detail">
+    <div class="hk-detail-main">
+        <div class="hk-detail-images">
+            {% if listing.images %}
+                <div class="hk-image-strip" tabindex="0">
+                    {% for img in listing.images %}
+                        <img
+                            src="{{ img.url }}"
+                            alt="{{ listing.title }} image {{ forloop.counter }}"
+                            class="hk-detail-image"
+                        />
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="hk-card-image-placeholder hk-detail-placeholder">
+                    No images
+                </div>
+            {% endif %}
+
+            {% if is_owner %}
+                <form
+                    class="hk-inline-form hk-image-upload-form"
+                    method="post"
+                    enctype="multipart/form-data"
+                    hx-post="{% url 'huduku_ui:listing_image_upload' listing.slug %}"
+                    hx-target=".hk-detail-images"
+                    hx-swap="outerHTML"
+                >
+                    {% csrf_token %}
+                    <label class="hk-file-label">
+                        Add images
+                        <input type="file" name="images" multiple required>
+                    </label>
+                    <button type="submit" class="hk-btn hk-btn-secondary">
+                        Upload
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+
+        <div class="hk-detail-info">
+            <h1>{{ listing.title }}</h1>
+            <p class="hk-detail-price">{{ listing.price_display }}</p>
+            <p class="hk-detail-location">{{ listing.location_display }}</p>
+            <p class="hk-detail-description">{{ listing.description }}</p>
+        </div>
+    </div>
+
+    <aside class="hk-detail-sidebar">
+        <section class="hk-lister-card">
+            <h2>Lister</h2>
+            <p>{{ listing.owner.name }}</p>
+
+            <div class="hk-phone-wrapper">
+                {% if is_authenticated %}
+                    <span class="hk-phone-visible">{{ listing.phone }}</span>
+                {% else %}
+                    <button
+                        class="hk-phone-blur"
+                        hx-get="{% url 'huduku_ui:login_modal' %}"
+                        hx-target="#hk-modal"
+                        hx-swap="innerHTML"
+                    >
+                        {{ listing.phone|default:"**********" }}
+                    </button>
+                    <small>Login to see full number</small>
+                {% endif %}
+            </div>
+
+            {% if is_owner %}
+                <div class="hk-owner-actions">
+                    <a
+                        href="{% url 'huduku_ui:listing_edit' listing.slug %}"
+                        class="hk-btn hk-btn-secondary"
+                    >
+                        Edit listing
+                    </a>
+
+                    <form
+                        method="post"
+                        class="hk-inline-form"
+                        hx-post="{% url 'huduku_ui:listing_delete' listing.slug %}"
+                        hx-confirm="Are you sure you want to delete this listing?"
+                        hx-target="body"
+                        hx-swap="innerHTML"
+                    >
+                        {% csrf_token %}
+                        <button type="submit" class="hk-btn hk-btn-danger">
+                            Delete listing
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+        </section>
+    </aside>
+</section>
+{% endblock %}

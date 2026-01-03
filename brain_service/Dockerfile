@@ -1,13 +1,14 @@
-# Use official Python image
 FROM python:3.13.2-alpine3.21
 
-# Set working directory
-WORKDIR ./app
-
-#Copy project files
-COPY requirements.txt .
+# Set working directory inside container
+WORKDIR /app
 
 # Install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Copy project code (including manage.py, core, huduku_ui, etc.)
+COPY . .
+
+# Run Django on port 8000 (matches docker-compose 8002:8000)
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

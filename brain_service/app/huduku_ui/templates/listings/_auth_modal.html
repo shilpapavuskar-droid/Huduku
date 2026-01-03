@@ -1,0 +1,99 @@
+<div class="hk-modal-backdrop" onclick="this.closest('.hk-modal-container').innerHTML=''">
+    <div class="hk-modal" onclick="event.stopPropagation()">
+        <button
+            class="hk-modal-close"
+            onclick="this.closest('.hk-modal-container').innerHTML=''; return false;"
+        >
+            ×
+        </button>
+
+        {% if mode == "login" %}
+            <h2>Login</h2>
+            <form
+                method="post"
+                hx-post="{% url 'huduku_ui:login_submit' %}"
+                hx-target="#hk-modal"
+                hx-swap="innerHTML"
+            >
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next|default:request.path }}">
+
+                <label>Email
+                    <input
+                        type="email"
+                        name="email"
+                        required
+                        class="hk-input"
+                    >
+                </label>
+
+                <label>Password
+                    <input type="password" name="password" required class="hk-input">
+                </label>
+
+                {% if error %}
+                    <p class="hk-error">{{ error }}</p>
+                {% endif %}
+
+                <button type="submit" class="hk-btn hk-btn-primary">Login</button>
+            </form>
+            <p>
+                Don't have an account?
+                <button
+                    class="hk-link-btn"
+                    hx-get="{% url 'huduku_ui:register_modal' %}"
+                    hx-target="#hk-modal"
+                    hx-swap="innerHTML"
+                >
+                    Register
+                </button>
+            </p>
+        {% else %}
+            <h2>Register</h2>
+            <form
+                method="post"
+                hx-post="{% url 'huduku_ui:register_submit' %}"
+                hx-target="#hk-modal"
+                hx-swap="innerHTML"
+            >
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next|default:request.path }}">
+
+                <label>Name
+                    <input type="text" name="name" class="hk-input">
+                </label>
+
+                <label>Email
+                    <input
+                        type="email"
+                        name="email"
+                        required
+                        class="hk-input"
+                        value="{{ form_values.email|default:'' }}"
+                    >
+                </label>
+
+                <label>Password
+                    <input type="password" name="password" required class="hk-input">
+                </label>
+
+                {% if error %}
+                    <p class="hk-error">{{ error }}</p>
+                {% endif %}
+
+                <button type="submit" class="hk-btn hk-btn-primary">Register</button>
+            </form>
+            <p>
+                Already have an account?
+                <button
+                    class="hk-link-btn"
+                    hx-get="{% url 'huduku_ui:login_modal' %}"
+                    hx-target="#hk-modal"
+                    hx-swap="innerHTML"
+                >
+                    Login
+                </button>
+            </p>
+        {% endif %}
+    </div>
+</div>

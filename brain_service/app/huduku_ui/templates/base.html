@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Huduku - {% block title %}{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'huduku_ui/css/styles.css' %}">
+    <script src="{% static 'huduku_ui/js/htmx.min.js' %}"></script>
+</head>
+<body>
+<header class="hk-header">
+    <div class="hk-header-inner">
+        <a href="{% url 'huduku_ui:home' %}" class="hk-logo">Huduku</a>
+
+        <nav class="hk-nav">
+            <div class="hk-nav-left">
+                <button
+                    class="hk-btn hk-btn-secondary"
+                    hx-get="{% url 'huduku_ui:filters_partial' %}"
+                    hx-target="#hk-filters-bar"
+                    hx-swap="innerHTML"
+                >
+                    Filters
+                </button>
+            </div>
+
+            <div class="hk-nav-right">
+                <button
+                    class="hk-btn hk-btn-primary"
+                    id="hk-sell-btn"
+                    hx-get="{% url 'huduku_ui:sell' %}"
+                    hx-target="#hk-modal"
+                    hx-swap="innerHTML"
+                >
+                    Sell
+                </button>
+
+                {% if is_authenticated %}
+                    <button class="hk-btn hk-btn-text" disabled>Register</button>
+                    <form
+                        method="post"
+                        action="{% url 'huduku_ui:logout' %}"
+                        class="hk-inline-form"
+                    >
+                        {% csrf_token %}
+                        <button type="submit" class="hk-btn hk-btn-text">Logout</button>
+                    </form>
+                {% else %}
+                    <button
+                        class="hk-btn hk-btn-text"
+                        hx-get="{% url 'huduku_ui:register_modal' %}"
+                        hx-target="#hk-modal"
+                        hx-swap="innerHTML"
+                    >
+                        Register
+                    </button>
+                    <button
+                        class="hk-btn hk-btn-text"
+                        hx-get="{% url 'huduku_ui:login_modal' %}"
+                        hx-target="#hk-modal"
+                        hx-swap="innerHTML"
+                    >
+                        Login
+                    </button>
+                {% endif %}
+            </div>
+        </nav>
+    </div>
+</header>
+
+<main class="hk-main">
+    {% block content %}{% endblock %}
+</main>
+
+<div id="hk-modal" class="hk-modal-container" aria-hidden="true"></div>
+
+<script>
+document.addEventListener("htmx:afterSwap", function (evt) {
+    if (evt.target.id === "hk-modal") {
+        // if there is content, open; if not, ensure it's closed
+        if (evt.target.innerHTML.trim()) {
+            evt.target.classList.add("hk-modal-open");
+            evt.target.setAttribute("aria-hidden", "false");
+        } else {
+            evt.target.classList.remove("hk-modal-open");
+            evt.target.setAttribute("aria-hidden", "true");
+        }
+    }
+});
+
+document.addEventListener("click", function (evt) {
+    if (evt.target.classList.contains("hk-modal-close") ||
+        evt.target.classList.contains("hk-modal-backdrop")) {
+        const modalRoot = document.getElementById("hk-modal");
+        modalRoot.classList.remove("hk-modal-open");
+        modalRoot.setAttribute("aria-hidden", "true");
+        modalRoot.innerHTML = "";
+    }
+});
+</script>
+
+</body>
+</html>
+

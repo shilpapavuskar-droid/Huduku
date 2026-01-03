@@ -4,6 +4,8 @@ from pydantic import EmailStr, constr
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model, authenticate
 from ninja.errors import HttpError
+from django.http import HttpResponse
+from django.core.exceptions import ValidationError
 import jwt
 import datetime
 
@@ -23,10 +25,16 @@ class UserOut(Schema):
 
 @router.post("/register", response=UserOut)
 def register(request, payload: RegisterIn):
-    user = register_user(
-        email=payload.email,
-        password=payload.password
-    )
+    try:
+        user = register_user(
+            email=payload.email,
+            password=payload.password,
+        )
+    except ValidationError as exc:
+        # exc can be a list or a message; normalize to string
+        msg = ", ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+        raise HttpError(400, msg or "Registration failed")
+
     return user
 
 
@@ -55,7 +63,7 @@ def verify_token(request):
     user = get_object_or_404(User, pk=user_id)
     return {"user_id": user.id, "email": user.email }
 
-SECRET_KEY = "your-secret"
+SECRET_KEY = "hrdhfhuier$343847520#D*&^^"
 
 class LoginIn(Schema):
     email: str
@@ -71,7 +79,7 @@ def login(request, payload: LoginIn):
         raise HttpError(401, "Invalid credentials")
     payload_data = {
         "user_id": user.id,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        "exp": datetime.datetime.now() + datetime.timedelta(minutes=10)
     }
     token = jwt.encode(payload_data, SECRET_KEY, algorithm="HS256")
     return {"token": token}
