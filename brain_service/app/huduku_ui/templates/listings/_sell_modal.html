@@ -1,0 +1,62 @@
+<!-- language: html -->
+        <div class="hk-modal-backdrop">
+            <div class="hk-modal" onclick="event.stopPropagation()">
+                <button
+                    type="button"
+                    class="hk-modal-close"
+                    onclick="
+                    const modalRoot = document.getElementById('hk-modal');
+                    modalRoot.classList.remove('hk-modal-open');
+                    modalRoot.setAttribute('aria-hidden', 'true');
+                    modalRoot.innerHTML = '';
+                    "
+                >
+                    ×
+                </button>
+
+                <h2>Create Listing</h2>
+                <form
+                    method="post"
+                    enctype="multipart/form-data"
+                    hx-post="{% url 'huduku_ui:sell_submit' %}"
+                    hx-trigger="submit"
+                >
+                    {% csrf_token %}
+                    <label>Title
+                        <input type="text" name="title" required class="hk-input">
+                    </label>
+                    <label>Description
+                        <textarea name="description" required class="hk-input"></textarea>
+                    </label>
+                    <label>Price
+                        <input type="number" name="price" required class="hk-input">
+                    </label>
+
+                    <label>Category</label>
+                    <select name="category" required class="hk-input">
+                        {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <fieldset class="hk-fieldset">
+                        <legend>Location</legend>
+                        <div
+                            id="hk-sell-location"
+                            hx-get="{% url 'huduku_ui:location_states' %}"
+                            hx-trigger="load"
+                            hx-target="#hk-sell-location"
+                            hx-swap="innerHTML"
+                        ></div>
+                    </fieldset>
+
+                    <label>Images (at least one)
+                        <input type="file" name="images" multiple required>
+                    </label>
+
+                    <button type="submit" class="hk-btn hk-btn-primary">
+                        Publish listing
+                    </button>
+                </form>
+            </div>
+        </div>

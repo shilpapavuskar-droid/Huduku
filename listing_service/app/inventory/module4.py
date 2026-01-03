@@ -178,7 +178,7 @@ def get_listing(request, listing_id: int):
 class ListingUpdateIn(Schema):
     title: Optional[str] = None
     category: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[int] = None
     location: Optional[str] = None
     is_active: Optional[bool] = None
 #

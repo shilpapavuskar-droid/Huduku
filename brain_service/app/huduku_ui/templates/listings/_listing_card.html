@@ -1,0 +1,23 @@
+<article class="hk-card">
+    <a
+        href="{% url 'huduku_ui:listing_detail' listing.id %}"
+        class="hk-card-link"
+    >
+        <div class="hk-card-image-wrapper">
+            {% if listing.images %}
+                <img
+                    src="http://localhost:8002{{ listing.images.0.image }}"
+                    alt="{{ listing.title }}"
+                    class="hk-card-image"
+                />
+            {% else %}
+                <div class="hk-card-image-placeholder">No image</div>
+            {% endif %}
+        </div>
+        <div class="hk-card-body">
+            <h3 class="hk-card-title">{{ listing.title }}</h3>
+            <p class="hk-card-price">{{ listing.price_display }}</p>
+            <p class="hk-card-location">{{ listing.location_display }}</p>
+        </div>
+    </a>
+</article>

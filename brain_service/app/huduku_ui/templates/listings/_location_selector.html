@@ -1,0 +1,101 @@
+{# listings/_location_selector.html #}
+{% if level == "state" %}
+    <label>State
+        <select
+            name="state"
+            class="hk-input"
+            hx-get="{% url 'huduku_ui:location_districts' '__STATE__' %}"
+            hx-target="#hk-sell-location"
+            hx-swap="innerHTML"
+            onchange="
+                const sel = this;
+                if (!sel.value) return;
+                const url = sel.getAttribute('hx-get').replace('__STATE__', sel.value);
+                htmx.ajax('GET', url, {target: '#hk-sell-location', swap: 'innerHTML'});
+            "
+        >
+            <option value="">Select state</option>
+            {% for st in states %}
+                <option value="{{ st.slug }}">{{ st.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+{% elif level == "district" %}
+    <label>District
+        <select
+            name="district"
+            class="hk-input"
+            hx-get="{% url 'huduku_ui:location_cities' state_slug=state_slug district_slug='__DISTRICT__' %}"
+            hx-target="#hk-sell-location"
+            hx-swap="innerHTML"
+            onchange="
+                const sel = this;
+                if (!sel.value) return;
+                const url = sel.getAttribute('hx-get').replace('__DISTRICT__', sel.value);
+                htmx.ajax('GET', url, {target: '#hk-sell-location', swap: 'innerHTML'});
+            "
+        >
+            <option value="">Select district</option>
+            {% for d in districts %}
+                <option value="{{ d.slug }}">{{ d.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+{% elif level == "city" %}
+    <label>City
+        <select
+            name="city"
+            class="hk-input"
+            hx-get="{% url 'huduku_ui:location_localities' state_slug=state_slug district_slug=district_slug city_slug='__CITY__' %}"
+            hx-target="#hk-sell-location"
+            hx-swap="innerHTML"
+            onchange="
+                const sel = this;
+                if (!sel.value) return;
+                const url = sel.getAttribute('hx-get').replace('__CITY__', sel.value);
+                htmx.ajax('GET', url, {target: '#hk-sell-location', swap: 'innerHTML'});
+            "
+        >
+            <option value="">Select city</option>
+            {% for c in cities %}
+                <option value="{{ c.slug }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+{% elif level == "locality" %}
+    <label>Locality
+        <select
+            name="locality_select"
+            class="hk-input"
+            hx-get="{% url 'huduku_ui:location_localities' state_slug=state_slug district_slug=district_slug city_slug=city_slug %}"
+            hx-target="#hk-sell-location"
+            hx-swap="innerHTML"
+            onchange="
+                const sel = this;
+                if (!sel.value) return;
+                const base = sel.getAttribute('hx-get');
+                const url = base + '?locality=' + encodeURIComponent(sel.value);
+                htmx.ajax('GET', url, {target: '#hk-sell-location', swap: 'innerHTML'});
+            "
+        >
+            <option value="">Select locality</option>
+            {% for loc in localities %}
+                <option value="{{ loc.slug }}"
+                    {% if selected_locality and selected_locality.slug == loc.slug %}selected{% endif %}
+                >
+                    {{ loc.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    {% if selected_locality %}
+        <input type="hidden" name="state_slug" value="{{ state_slug }}">
+        <input type="hidden" name="district_slug" value="{{ district_slug }}">
+        <input type="hidden" name="city_slug" value="{{ city_slug }}">
+        <input type="hidden" name="locality_slug" value="{{ selected_locality.slug }}">
+    {% endif %}
+{% endif %}

@@ -1,0 +1,48 @@
+<div id="hk-filters-bar" class="hk-filters">
+    <h2 class="hk-filters-title">Categories</h2>
+    <ul class="hk-category-menu">
+        {% for category in categories %}
+            <li class="hk-category-item">
+                <a
+                    href="#"
+                    hx-get="{% url 'huduku_ui:listing_grid_partial' %}?category={{ category.slug }}"
+                    hx-target="#hk-listing-grid"
+                    hx-push-url="true"
+                    class="hk-category-link"
+                >
+                    {{ category.name }}
+                </a>
+                {% if category.children %}
+                    <ul class="hk-category-submenu">
+                        {% for child in category.children %}
+                            <li>
+                                <a
+                                    href="#"
+                                    hx-get="{% url 'huduku_ui:listing_grid_partial' %}?category={{ child.slug }}"
+                                    hx-target="#hk-listing-grid"
+                                    hx-push-url="true"
+                                    class="hk-category-link"
+                                >
+                                    {{ child.name }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+
+    <h2 class="hk-filters-title">Location</h2>
+    <div class="hk-location-selector">
+        <div
+            id="hk-location-levels"
+            hx-get="{% url 'huduku_ui:location_states' %}"
+            hx-trigger="load"
+            hx-target="#hk-location-levels"
+            hx-swap="innerHTML"
+        >
+            <!-- states/districts/cities/localities will be injected here -->
+        </div>
+    </div>
+</div>
